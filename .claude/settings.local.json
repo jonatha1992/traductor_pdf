@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python manage.py:*)",
+      "Bash(curl:*)",
+      "Bash(venvScripts:*)",
+      "Bash(venvScriptsactivate.bat)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

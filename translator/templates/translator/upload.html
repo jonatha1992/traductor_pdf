@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traductor de PDF - Inglés a Español</title>
+    <meta name="description" content="Traduce documentos PDF de inglés a español de forma offline y gratuita">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'translator/style.css' %}">
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+                <h1>Traductor de PDF</h1>
+            </div>
+            <p class="subtitle">Traduce documentos de inglés a español • 100% Offline</p>
+        </header>
+
+        {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+            <div class="message message-{{ message.tags }}">
+                <svg class="message-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {% if message.tags == 'success' %}
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" />
+                    <polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" />
+                    {% else %}
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round" />
+                    {% endif %}
+                </svg>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <main class="main-content">
+            <div class="upload-section">
+                <h2>Subir PDF para traducir</h2>
+
+                <form method="post" enctype="multipart/form-data" class="upload-form" id="upload-form">
+                    {% csrf_token %}
+
+                    <div class="file-upload-area" id="file-upload-area">
+                        <input type="file" name="pdf_file" id="pdf-file-input" accept=".pdf" required>
+
+                        <div class="upload-placeholder">
+                            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                <polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round" />
+                                <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            <p class="upload-text">
+                                <span class="upload-text-main">Arrastra tu PDF aquí</span>
+                                <span class="upload-text-sub">o haz clic para seleccionar</span>
+                            </p>
+                            <p class="upload-info">Máximo 50MB • Solo archivos PDF</p>
+                        </div>
+
+                        <div class="file-selected" id="file-selected" style="display: none;">
+                            <svg class="file-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" />
+                                <polyline points="13 2 13 9 20 9" stroke="currentColor" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            <div class="file-info">
+                                <p class="file-name" id="file-name"></p>
+                                <p class="file-size" id="file-size"></p>
+                            </div>
+                            <button type="button" class="remove-file" id="remove-file">
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                    <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="language-select">
+                        <label for="target-language">Idioma destino</label>
+                        {% if language_options %}
+                        <select name="target_language" id="target-language">
+                            {% for lang in language_options %}
+                            <option value="{{ lang.code }}">{{ lang.name }} ({{ lang.code }})</option>
+                            {% endfor %}
+                        </select>
+                        {% else %}
+                        <p class="error-text">No se detectaron modelos instalados. Ejecuta <code>python instalar_modelo_en_es.py</code>.</p>
+                        {% endif %}
+                    </div>
+
+                    {% if form.pdf_file.errors %}
+                    <div class="form-errors">
+                        {% for error in form.pdf_file.errors %}
+                        <p class="error-text">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <button type="submit" class="submit-button" id="submit-button" {% if not language_options %}disabled{% endif %}>
+                        <svg class="button-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                            <polyline points="12 6 12 12 16 14" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <span>Traducir PDF</span>
+                    </button>
+                </form>
+
+                <div class="status-panel">
+                    <div class="progress-panel" id="progress-panel"
+                        data-status-url="{% url 'translator:status' 0 %}"
+                        data-cancel-url="{% url 'translator:cancel' 0 %}">
+                        <div class="progress-row">
+                            <p class="progress-label">Progreso</p>
+                            <p class="progress-percent" id="progress-percent">0%</p>
+                        </div>
+                        <div class="progress-bar">
+                            <span class="progress-fill" id="progress-fill" style="width: 0%;"></span>
+                        </div>
+                        <p class="status-message" id="status-message">Listo para comenzar.</p>
+                        <p class="progress-detail" id="progress-detail"></p>
+                        <p class="progress-detail" id="chunk-detail"></p>
+                        <button type="button" class="cancel-button" id="cancel-button" disabled>Detener traducción</button>
+                    </div>
+                    <div class="result-section" id="result-section" hidden>
+                        <div class="success-card">
+                            <div class="success-icon-wrapper">
+                                <svg class="success-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                    <polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </div>
+
+                            <h3 id="result-heading">Traducción completada!</h3>
+                            <p class="result-info" id="result-info">Tu documento ha sido traducido exitosamente.</p>
+
+                            <div class="file-details" id="result-details">
+                                <div class="detail-item">
+                                    <span class="detail-label">Archivo original:</span>
+                                    <span class="detail-value" id="result-original"></span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Idioma destino:</span>
+                                    <span class="detail-value" id="result-target"></span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Finalizado:</span>
+                                    <span class="detail-value" id="result-completed"></span>
+                                </div>
+                            </div>
+
+                            <a href="#" class="download-button" id="download-link" hidden>
+                                <svg class="button-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                    <polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                    <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                                <span>Descargar PDF traducido</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <footer class="footer">
+            <div class="features">
+                <div class="feature">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                    <span>100% Offline</span>
+                </div>
+                <div class="feature">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span>Privado y Seguro</span>
+                </div>
+                <div class="feature">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span>Rápido y Eficiente</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('pdf-file-input');
+        const fileUploadArea = document.getElementById('file-upload-area');
+        const fileSelected = document.getElementById('file-selected');
+        const fileName = document.getElementById('file-name');
+        const fileSize = document.getElementById('file-size');
+        const removeFileBtn = document.getElementById('remove-file');
+        const uploadForm = document.getElementById('upload-form');
+        const submitButton = document.getElementById('submit-button');
+        const progressPanel = document.getElementById('progress-panel');
+        const progressFill = document.getElementById('progress-fill');
+        const progressPercent = document.getElementById('progress-percent');
+        const statusMessage = document.getElementById('status-message');
+        const progressDetail = document.getElementById('progress-detail');
+        const chunkDetail = document.getElementById('chunk-detail');
+        const cancelButton = document.getElementById('cancel-button');
+        const resultSection = document.getElementById('result-section');
+        const resultOriginal = document.getElementById('result-original');
+        const resultTarget = document.getElementById('result-target');
+        const resultCompleted = document.getElementById('result-completed');
+        const resultInfo = document.getElementById('result-info');
+        const downloadLink = document.getElementById('download-link');
+        const csrfToken = document.querySelector('[name="csrfmiddlewaretoken"]').value;
+        const statusUrlTemplate = progressPanel.dataset.statusUrl;
+        const cancelUrlTemplate = progressPanel.dataset.cancelUrl;
+        let currentTranslationId = null;
+        let pollingInterval = null;
+        const spinnerMarkup = '<svg class="button-icon spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Traduciendo...</span>';
+        const originalButtonContent = submitButton.innerHTML;
+
+        // Handle file selection
+        fileInput.addEventListener('change', function () {
+            if (this.files && this.files[0]) {
+                displayFile(this.files[0]);
+            }
+        });
+
+        // Drag and drop
+        fileUploadArea.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            this.classList.add('drag-over');
+        });
+
+        fileUploadArea.addEventListener('dragleave', function (e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+        });
+
+        fileUploadArea.addEventListener('drop', function (e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                fileInput.files = e.dataTransfer.files;
+                displayFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        function displayFile(file) {
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            fileUploadArea.querySelector('.upload-placeholder').style.display = 'none';
+            fileSelected.style.display = 'flex';
+        }
+
+        removeFileBtn.addEventListener('click', function () {
+            fileInput.value = '';
+            fileUploadArea.querySelector('.upload-placeholder').style.display = 'flex';
+            fileSelected.style.display = 'none';
+        });
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        function updateProgress(value) {
+            const safeValue = Math.max(0, Math.min(100, Math.floor(value)));
+            progressFill.style.width = `${safeValue}%`;
+            progressPercent.textContent = `${safeValue}%`;
+        }
+
+        function updatePageDetails(data) {
+            if (!data.total_pages) {
+                progressDetail.textContent = '';
+                return;
+            }
+            const current = data.current_page || 0;
+            progressDetail.textContent = `Procesando página ${current} de ${data.total_pages}`;
+        }
+
+        function updateChunkDetails(data) {
+            if (!data.total_chunks) {
+                chunkDetail.textContent = '';
+                return;
+            }
+            const currentChunk = data.current_chunk || 0;
+            chunkDetail.textContent = `Parte ${currentChunk} de ${data.total_chunks}`;
+        }
+
+        function getStatusLabel(status) {
+            if (status === 'processing') return 'Traduciendo en curso...';
+            if (status === 'completed') return 'Traducción finalizada.';
+            if (status === 'error') return 'Hubo un error durante la traducción.';
+            return status || 'Procesando...';
+        }
+
+        async function refreshStatus() {
+            if (!currentTranslationId) return;
+            const statusUrl = statusUrlTemplate.replace('/0/', `/${currentTranslationId}/`);
+            try {
+                const response = await fetch(statusUrl, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+                if (!response.ok) throw new Error('state-failed');
+                const data = await response.json();
+                updateProgress(data.progress || 0);
+                const messageText = data.status_message || data.message || getStatusLabel(data.status);
+                statusMessage.textContent = messageText;
+                updatePageDetails(data);
+                updateChunkDetails(data);
+                if (data.status === 'completed') {
+                    finalizeSuccess(data);
+                } else if (data.status === 'error') {
+                    finalizeError(data);
+                } else {
+                    cancelButton.disabled = false;
+                }
+            } catch (error) {
+                if (pollingInterval) {
+                    clearInterval(pollingInterval);
+                    pollingInterval = null;
+                }
+                statusMessage.textContent = 'No se pudo obtener el estado de la traducción.';
+                cancelButton.disabled = true;
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalButtonContent;
+            }
+        }
+
+        function startPolling(id) {
+            currentTranslationId = id;
+            cancelButton.disabled = false;
+            resetResultSection();
+            updateProgress(0);
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+            }
+            pollingInterval = setInterval(refreshStatus, 2000);
+            refreshStatus();
+        }
+
+        function finalizeSuccess(data) {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+            updateProgress(100);
+            statusMessage.textContent = data.status_message || data.message || 'Traducción completada.';
+            updatePageDetails(data);
+            updateChunkDetails(data);
+            cancelButton.disabled = true;
+            resultSection.hidden = false;
+            resultOriginal.textContent = data.original_filename || '---';
+            resultTarget.textContent = data.target_language || '---';
+            resultCompleted.textContent = data.completed_at || 'Ahora';
+            resultInfo.textContent = 'Tu documento fue traducido exitosamente.';
+            if (data.download_url) {
+                downloadLink.href = data.download_url;
+                downloadLink.hidden = false;
+            }
+            submitButton.disabled = false;
+            submitButton.innerHTML = originalButtonContent;
+        }
+
+        function finalizeError(data) {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+            statusMessage.textContent = data.status_message || data.message || 'Hubo un error durante la traducción.';
+            progressDetail.textContent = '';
+            chunkDetail.textContent = '';
+            cancelButton.disabled = true;
+            submitButton.disabled = false;
+            submitButton.innerHTML = originalButtonContent;
+        }
+
+        function resetResultSection() {
+            resultSection.hidden = true;
+            downloadLink.hidden = true;
+            progressDetail.textContent = '';
+            chunkDetail.textContent = '';
+        }
+
+        uploadForm.addEventListener('submit', async function (event) {
+            event.preventDefault();
+            if (!fileInput.files.length) {
+                statusMessage.textContent = 'Selecciona un archivo PDF para traducir.';
+                return;
+            }
+            submitButton.disabled = true;
+            submitButton.innerHTML = spinnerMarkup;
+            statusMessage.textContent = 'Preparando traducción...';
+            cancelButton.disabled = true;
+            resetResultSection();
+            updateProgress(0);
+            try {
+                const response = await fetch(uploadForm.action || window.location.href, {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: new FormData(uploadForm)
+                });
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    const errors = [];
+                    if (errorData.errors) {
+                        for (const key in errorData.errors) {
+                            errors.push(...errorData.errors[key]);
+                        }
+                    }
+                    statusMessage.textContent = errors.join(' ') || 'Error al iniciar la traducción.';
+                    throw new Error('start-failed');
+                }
+                const data = await response.json();
+                updatePageDetails(data);
+                updateChunkDetails(data);
+                startPolling(data.translation_id);
+            } catch (error) {
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalButtonContent;
+            }
+        });
+
+        cancelButton.addEventListener('click', async function () {
+            if (!currentTranslationId) return;
+            cancelButton.disabled = true;
+            statusMessage.textContent = 'Cancelando traducción...';
+            await fetch(cancelUrlTemplate.replace('/0/', `/${currentTranslationId}/`), {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
