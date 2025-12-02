@@ -120,10 +120,16 @@ def perform_translation_job(translation_id):
                             translated_pdf.close()
                             return
 
+                        # Create cancel callback that checks the database
+                        def check_cancel():
+                            translation_record.refresh_from_db(fields=['cancel_requested'])
+                            return translation_record.cancel_requested
+
                         replace_text_in_page(
                             source_pdf[page_index],
                             translated_pdf[page_index],
                             translator,
+                            cancel_callback=check_cancel,
                         )
 
                         translation_record.current_page = page_index + 1
@@ -142,11 +148,19 @@ def perform_translation_job(translation_id):
         translation_record.current_chunk = translation_record.total_chunks
         translation_record.save(update_fields=['progress', 'status', 'completed_at', 'error_message', 'status_message', 'current_page', 'current_chunk'])
 
+
     except Exception as exc:
-        translation_record.status = 'error'
-        translation_record.error_message = str(exc)
-        translation_record.status_message = str(exc)
-        translation_record.save(update_fields=['status', 'error_message', 'status_message'])
+        # Check if it's a cancellation
+        if 'TranslationCanceled' in str(type(exc).__name__) or 'canceled' in str(exc).lower():
+            translation_record.status = 'error'
+            translation_record.status_message = 'Traduccion cancelada por el usuario.'
+            translation_record.error_message = 'Traduccion cancelada por el usuario.'
+            translation_record.save(update_fields=['status', 'status_message', 'error_message'])
+        else:
+            translation_record.status = 'error'
+            translation_record.error_message = str(exc)
+            translation_record.status_message = str(exc)
+            translation_record.save(update_fields=['status', 'error_message', 'status_message'])
     finally:
         if translated_pdf:
             translated_pdf.close()
