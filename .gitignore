@@ -8,7 +8,6 @@ __pycache__/
 *.log
 db.sqlite3
 db.sqlite3-journal
-/media
 /staticfiles
 
 # Virtual environment
@@ -28,6 +27,3 @@ Thumbs.db
 # Argos Translate models (optional - comment out if you want to commit models)
 .local/
 
-# Uploaded files
-media/pdfs/
-media/translated/

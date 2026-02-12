@@ -165,11 +165,16 @@ body {
     transform: scale(1.02);
 }
 
-.file-upload-area input[type="file"] {
+.upload-placeholder {
+    position: relative;
+}
+
+.upload-placeholder input[type="file"] {
     position: absolute;
     inset: 0;
     opacity: 0;
     cursor: pointer;
+    z-index: 2;
 }
 
 .upload-icon {
@@ -212,6 +217,8 @@ body {
     background: var(--bg-secondary);
     border-radius: 12px;
     border: 1px solid var(--primary-color);
+    position: relative;
+    z-index: 10;
 }
 
 .file-icon {
@@ -560,6 +567,7 @@ body {
     from {
         opacity: 0;
     }
+
     to {
         opacity: 1;
     }
@@ -570,6 +578,7 @@ body {
         opacity: 0;
         transform: translateY(-20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -581,6 +590,7 @@ body {
         opacity: 0;
         transform: translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -592,6 +602,7 @@ body {
         opacity: 0;
         transform: translateX(20px);
     }
+
     to {
         opacity: 1;
         transform: translateX(0);
@@ -603,6 +614,7 @@ body {
         opacity: 0;
         transform: scale(0.8);
     }
+
     to {
         opacity: 1;
         transform: scale(1);
@@ -610,9 +622,12 @@ body {
 }
 
 @keyframes float {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: translateY(0);
     }
+
     50% {
         transform: translateY(-10px);
     }
@@ -622,6 +637,7 @@ body {
     from {
         transform: rotate(0deg);
     }
+
     to {
         transform: rotate(360deg);
     }
@@ -636,20 +652,20 @@ body {
     body {
         padding: 1rem;
     }
-    
+
     .header h1 {
         font-size: 2rem;
     }
-    
+
     .subtitle {
         font-size: 1rem;
     }
-    
+
     .upload-section,
     .success-card {
         padding: 1.5rem;
     }
-    
+
     .features {
         grid-template-columns: 1fr;
     }
