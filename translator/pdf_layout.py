@@ -1,8 +1,7 @@
-from typing import Callable, Optional
-
+from typing import Callable, Optional, List, Dict
 import fitz  # PyMuPDF
+import re
 
-# Translation cache to avoid re-translating the same text
 _translation_cache = {}
 
 
@@ -11,21 +10,58 @@ class TranslationCanceled(Exception):
 
 
 def _translate_with_cache(text: str, translator) -> str:
-    """Translate text using cache to avoid redundant translations."""
     global _translation_cache
+    text_stripped = text.strip()
     
-    # Use cache for common words/phrases
-    if text in _translation_cache:
-        return _translation_cache[text]
+    # Skip empty, numbers-only, or dots-only text
+    if not text_stripped:
+        return text
+    if re.match(r'^[\d\.\s]+$', text_stripped):
+        return text
+    
+    if text_stripped in _translation_cache:
+        cached = _translation_cache[text_stripped]
+        # Preserve original whitespace
+        if text.startswith(' '):
+            cached = ' ' + cached.lstrip()
+        if text.endswith(' '):
+            cached = cached.rstrip() + ' '
+        return cached
     
     try:
-        translated = translator.translate(text)
-        # Only cache if translation succeeded and cache isn't too large
-        if len(_translation_cache) < 10000:  # Limit cache size
-            _translation_cache[text] = translated
-        return translated
+        translated = translator.translate(text_stripped)
+        if translated:
+            _translation_cache[text_stripped] = translated.strip()
+            # Preserve whitespace
+            if text.startswith(' '):
+                translated = ' ' + translated.lstrip()
+            if text.endswith(' '):
+                translated = translated.rstrip() + ' '
+            return translated
+        return text
     except Exception:
-        return text  # Return original on error
+        return text
+
+
+def _get_font_name(original_font: str) -> str:
+    font = original_font.lower()
+    if 'bold' in font:
+        return 'hebo'
+    elif 'italic' in font:
+        return 'heit'
+    else:
+        return 'helv'
+
+
+def _color_to_rgb(color) -> tuple:
+    if isinstance(color, int):
+        r = ((color >> 16) & 0xFF) / 255.0
+        g = ((color >> 8) & 0xFF) / 255.0
+        b = (color & 0xFF) / 255.0
+        return (r, g, b)
+    elif hasattr(color, '__iter__') and len(color) >= 3:
+        return tuple(color)[:3]
+    return (0, 0, 0)
 
 
 def replace_text_in_page(
@@ -35,8 +71,10 @@ def replace_text_in_page(
     cancel_callback: Optional[Callable[[], bool]] = None
 ) -> None:
     """
-    Translate text preserving EXACT PDF structure using redaction API.
-    This approach modifies text in-place without creating new spans.
+    Simple and consistent text replacement.
+    - Groups contiguous text spans
+    - Translates them
+    - Inserts with ORIGINAL font size (no scaling)
     """
     page_dict = source_page.get_text("dict")
     
@@ -87,30 +125,13 @@ def replace_text_in_page(
         return s * scale
     
     for block in page_dict.get("blocks", []):
-        # Skip non-text blocks (images, etc.)
         if block.get("type") != 0:
             continue
         
         for line in block.get("lines", []):
-            # Check for cancellation
             if cancel_callback and cancel_callback():
                 raise TranslationCanceled("Translation canceled by user")
             
-            # Collect all text from spans in this line
-            line_text = ""
-            for span in line.get("spans", []):
-                text = span.get("text", "")
-                line_text += text
-            
-            line_text = line_text.strip()
-            if not line_text:
-                continue
-            
-            # Translate the entire line
-            translated_text = _translate_with_cache(line_text, translator)
-            
-            # For each span in the line, we need to replace its text
-            # We'll distribute the translated text across spans proportionally
             spans = line.get("spans", [])
             if not spans:
                 continue
@@ -273,12 +294,6 @@ def translate_pdf_document(
     progress_callback: Optional[Callable[[int, int], None]] = None,
     cancel_callback: Optional[Callable[[], bool]] = None,
 ) -> tuple[fitz.Document, int]:
-    """
-    Translate a PDF file keeping the original layout.
-
-    Returns the translated PyMuPDF document and the total number of processed pages.
-    """
-
     with fitz.open(input_path) as source_pdf:
         total_pages = source_pdf.page_count
         translated_pdf = fitz.open()
@@ -298,12 +313,8 @@ def translate_pdf_document(
 
             if progress_callback:
                 progress_callback(page_number + 1, total_pages)
-
+        
         if total_pages == 0:
-            # Ensure the exported PDF has at least one blank page to keep readers happy.
-            translated_pdf.new_page(width=595, height=842)
-
+            translated_pdf.new_page()
+        
         return translated_pdf, total_pages
-
-
-
