@@ -42,6 +42,49 @@ def replace_text_in_page(
     
     # Collect all text replacements first
     replacements = []
+
+    def _map_font_name(original: str) -> str:
+        """Map extracted font names to PDF base14 or close equivalents.
+        Prioritize uniformity: mostly Helvetica, Courier for code.
+        """
+        if not original:
+            return "helv"
+        f = original.lower().replace('-', '').replace(' ', '').replace('_', '')
+        
+        # Keep Courier / Mono for code blocks
+        if 'courier' in f or 'mono' in f or 'console' in f:
+            if 'bold' in f:
+                return 'cour-b'
+            return 'cour'
+            
+        # For everything else, use Helvetica to ensure uniformity
+        # This fixes the "messy fonts" issue by standardizing the look
+        if 'bold' in f and 'italic' in f:
+            return 'helv-bi'
+        if 'bold' in f:
+            return 'helv-b'
+        if 'italic' in f:
+            return 'helv-i'
+        return 'helv'
+
+    def _fit_font_size_for_width(text: str, fontname: str, size: float, width: float, fallback_avg_width: float) -> float:
+        """Shrink font size if needed to make translated text fit bbox width.
+        Uses fitz.get_text_length when available, otherwise a simple estimate.
+        """
+        s = max(1.0, float(size) or 1.0)
+        try:
+            w = fitz.get_text_length(text, fontname=fontname, fontsize=s)  # type: ignore[attr-defined]
+            if w <= 0:
+                raise ValueError
+        except Exception:
+            # Fallback: estimate width by average glyph width
+            avg = max(0.5, fallback_avg_width)
+            w = avg * max(1, len(text))
+        if w <= width:
+            return s
+        # scale down but not more than 60% of original (allowed slightly more shrinkage)
+        scale = max(0.6, min(1.0, (width - 0.5) / w))
+        return s * scale
     
     for block in page_dict.get("blocks", []):
         # Skip non-text blocks (images, etc.)
@@ -85,32 +128,32 @@ def replace_text_in_page(
                     'color': span.get("color", 0),
                 })
             else:
-                # Multiple spans: distribute translated words
+                # Multiple spans: distribute translated words across original spans
                 original_texts = [span.get("text", "") for span in spans]
                 total_original_length = sum(len(t) for t in original_texts)
-                
+
                 if total_original_length == 0:
                     continue
-                
+
                 translated_words = translated_text.split()
                 current_word_idx = 0
-                
+
                 for i, span in enumerate(spans):
                     if current_word_idx >= len(translated_words):
                         break
-                    
+
                     # Calculate how many words this span should get
                     original_proportion = len(original_texts[i]) / total_original_length
                     words_for_span = max(1, int(len(translated_words) * original_proportion))
-                    
+
                     # Adjust for last span to get remaining words
                     if i == len(spans) - 1:
                         words_for_span = len(translated_words) - current_word_idx
-                    
+
                     # Get words for this span
                     span_words = translated_words[current_word_idx:current_word_idx + words_for_span]
                     span_text = " ".join(span_words)
-                    
+
                     bbox = fitz.Rect(span["bbox"])
                     replacements.append({
                         'bbox': bbox,
@@ -120,13 +163,17 @@ def replace_text_in_page(
                         'size': span.get("size", 11.0),
                         'color': span.get("color", 0),
                     })
-                    
+
                     current_word_idx += words_for_span
-    
-    # Now apply all replacements using redaction
+
+    # Now apply all replacements using redaction (remove original glyphs without painting white boxes)
     for repl in replacements:
-        # Add redaction annotation
-        target_page.add_redact_annot(repl['bbox'], text="", fill=(1, 1, 1))
+        # Add redaction annotation – no fill to avoid covering images/backgrounds
+        try:
+            target_page.add_redact_annot(repl['bbox'], text="", fill=None)
+        except TypeError:
+            # Older PyMuPDF may not accept None -> fall back to very low alpha white
+            target_page.add_redact_annot(repl['bbox'], text="", fill=(1, 1, 1))
     
     # Apply all redactions (this removes the old text)
     target_page.apply_redactions()
@@ -135,7 +182,7 @@ def replace_text_in_page(
     for repl in replacements:
         if not repl['new_text'].strip():
             continue
-        
+
         # Convert color
         color = repl['color']
         if isinstance(color, int):
@@ -145,56 +192,79 @@ def replace_text_in_page(
             rgb_color = (r, g, b)
         else:
             rgb_color = color
+
+        source_font = str(repl.get('font', 'helv')) or 'helv'
+        mapped_font = _map_font_name(source_font)
+
+        # Fit font size to span width, if needed
+        bbox: fitz.Rect = repl['bbox']
+        span_width = max(1.0, bbox.width)
+        old_text = repl.get('old_text', '') or ''
+        avg_width = span_width / max(1, len(old_text)) if old_text else span_width / max(1, len(repl['new_text']))
+        orig_size = float(repl.get('size', 11.0))
         
-        # Map font
-        font = repl['font'].lower().replace('-', '').replace(' ', '').replace('_', '')
-        if 'times' in font or 'serif' in font:
-            if 'bold' in font and 'italic' in font:
-                mapped_font = 'times-bi'
-            elif 'bold' in font:
-                mapped_font = 'times-b'
-            elif 'italic' in font:
-                mapped_font = 'times-i'
-            else:
-                mapped_font = 'times'
-        elif 'courier' in font or 'mono' in font:
-            if 'bold' in font:
-                mapped_font = 'cour-b'
-            else:
-                mapped_font = 'cour'
-        else:
-            if 'bold' in font and 'italic' in font:
-                mapped_font = 'helv-bi'
-            elif 'bold' in font:
-                mapped_font = 'helv-b'
-            elif 'italic' in font:
-                mapped_font = 'helv-i'
-            else:
-                mapped_font = 'helv'
+        # Scale down the original font size to create more "padding" and ensure it's smaller
+        # using 0.85 (15% smaller) as requested to "achicar la fuente" and "el padding"
+        target_size = orig_size * 0.85
         
-        # Insert text at top-left of bbox
-        origin = fitz.Point(repl['bbox'].x0, repl['bbox'].y0 + repl['size'])
+        fitted_size = _fit_font_size_for_width(repl['new_text'], mapped_font, target_size, span_width, avg_width)
         
-        try:
-            target_page.insert_text(
-                origin,
-                repl['new_text'],
-                fontsize=repl['size'],
-                fontname=mapped_font,
-                color=rgb_color,
-            )
-        except:
-            # Fallback to basic font
+        # Allow shrinking down to 50% of original (was 60%) to ensure it fits better
+        # Also lowered absolute minimum from 6.0 to 5.0
+        min_allowed = max(5.0, max(0.5 * orig_size, fitted_size * 0.9))
+
+        inserted = False
+        font_candidates = []
+        # Prioritize the mapped font (usually helv), then fallback to helv
+        for candidate in (mapped_font, "helv"):
+            if candidate and candidate not in font_candidates:
+                font_candidates.append(candidate)
+
+        for font_choice in font_candidates:
+            size_try = fitted_size
+            # Try 6 decrements
+            for _ in range(6):
+                try:
+                    # insert_textbox returns < 0 if text doesn't fit
+                    leftover = target_page.insert_textbox(
+                        bbox,
+                        repl['new_text'],
+                        fontsize=size_try,
+                        fontname=font_choice,
+                        color=rgb_color,
+                        align=0,  # left align to mimic original spans
+                    )
+                except Exception:
+                    break
+                
+                # If leftover is empty or 0 (or whatever indicates success), it fit successfully
+                # PyMuPDF insert_textbox returns < 0 if text did not fit.
+                if leftover >= 0:
+                    inserted = True
+                    break
+                
+                # Reduce size and try again
+                size_try = max(min_allowed, size_try * 0.9)
+                if size_try <= min_allowed and size_try < fitted_size:
+                     break
+            
+            if inserted:
+                break
+
+        if not inserted:
+            # If it still doesn't fit, we force it in with the smallest allowed size
+            # But we use insert_textbox which handles wrapping, instead of insert_text which overflows
             try:
-                target_page.insert_text(
-                    origin,
+                target_page.insert_textbox(
+                    bbox,
                     repl['new_text'],
-                    fontsize=repl['size'],
+                    fontsize=min_allowed,
                     fontname="helv",
-                    color=(0, 0, 0),
+                    color=rgb_color,
+                    align=0,
                 )
-            except:
-                pass  # Give up on this replacement
+            except Exception:
+                pass
 
 
 def translate_pdf_document(
