@@ -136,6 +136,19 @@ def replace_text_in_page(
             if not spans:
                 continue
             
+            # Collect all text from spans in this line
+            line_text = ""
+            for span in spans:
+                text = span.get("text", "")
+                line_text += text
+            
+            line_text = line_text.strip()
+            if not line_text:
+                continue
+            
+            # Translate the entire line
+            translated_text = _translate_with_cache(line_text, translator)
+            
             # If single span, simple replacement
             if len(spans) == 1:
                 span = spans[0]
@@ -225,14 +238,14 @@ def replace_text_in_page(
         orig_size = float(repl.get('size', 11.0))
         
         # Scale down the original font size to create more "padding" and ensure it's smaller
-        # using 0.85 (15% smaller) as requested to "achicar la fuente" and "el padding"
-        target_size = orig_size * 0.85
+        # using 0.75 (25% smaller) as requested to "achicar la fuente" and "el padding"
+        target_size = orig_size * 0.75
         
         fitted_size = _fit_font_size_for_width(repl['new_text'], mapped_font, target_size, span_width, avg_width)
         
         # Allow shrinking down to 50% of original (was 60%) to ensure it fits better
-        # Also lowered absolute minimum from 6.0 to 5.0
-        min_allowed = max(5.0, max(0.5 * orig_size, fitted_size * 0.9))
+        # Also lowered absolute minimum from 5.0 to 4.0
+        min_allowed = max(4.0, max(0.5 * orig_size, fitted_size * 0.9))
 
         inserted = False
         font_candidates = []
