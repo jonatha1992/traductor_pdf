@@ -165,6 +165,14 @@ def perform_translation_job(translation_id):
         if translated_pdf:
             translated_pdf.close()
 
+def check_translation_ownership(request, translation_id: int) -> bool:
+    """Check if the requesting session or user owns this translation job."""
+    if hasattr(request, 'user') and request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser):
+        return True
+    user_translations = request.session.get('user_translations', [])
+    return translation_id in user_translations
+
+
 def upload_pdf(request):
     """Render the upload interface and handle translation requests."""
 
@@ -190,6 +198,11 @@ def upload_pdf(request):
         translation.cancel_requested = False
         translation.save()
 
+        # Track translation in user session to prevent IDOR enumeration
+        user_translations = request.session.get('user_translations', [])
+        user_translations.append(translation.id)
+        request.session['user_translations'] = user_translations
+
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
             start_translation_thread(translation.id)
             return JsonResponse({'translation_id': translation.id})
@@ -204,6 +217,8 @@ def upload_pdf(request):
 
 def translation_status(request, pk):
     """Return JSON with the current status and progress of a translation."""
+    if not check_translation_ownership(request, pk):
+        return JsonResponse({'error': 'No autorizado'}, status=403)
 
     translation = get_object_or_404(PDFTranslation, pk=pk)
     data = {
@@ -229,6 +244,8 @@ def translation_status(request, pk):
 
 def download_pdf(request, pk):
     """Serve the translated PDF for download."""
+    if not check_translation_ownership(request, pk):
+        raise Http404("Documento no encontrado o no autorizado")
 
     translation = get_object_or_404(PDFTranslation, pk=pk, status='completed')
     if not translation.translated_pdf:
@@ -245,6 +262,8 @@ def download_pdf(request, pk):
 @require_POST
 def cancel_translation(request, pk):
     """Mark a running translation as canceled."""
+    if not check_translation_ownership(request, pk):
+        return JsonResponse({'error': 'No autorizado'}, status=403)
 
     translation = get_object_or_404(PDFTranslation, pk=pk)
     if translation.status == 'processing':

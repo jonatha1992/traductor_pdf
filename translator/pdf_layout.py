@@ -9,6 +9,12 @@ class TranslationCanceled(Exception):
     """Raised when the user cancels an in-flight translation."""
 
 
+def _get_translator_key(translator) -> str:
+    from_code = getattr(getattr(translator, 'from_lang', None), 'code', getattr(translator, 'from_code', 'en'))
+    to_code = getattr(getattr(translator, 'to_lang', None), 'code', getattr(translator, 'to_code', 'target'))
+    return f"{from_code}->{to_code}"
+
+
 def _translate_with_cache(text: str, translator) -> str:
     global _translation_cache
     text_stripped = text.strip()
@@ -19,8 +25,9 @@ def _translate_with_cache(text: str, translator) -> str:
     if re.match(r'^[\d\.\s]+$', text_stripped):
         return text
     
-    if text_stripped in _translation_cache:
-        cached = _translation_cache[text_stripped]
+    cache_key = (_get_translator_key(translator), text_stripped)
+    if cache_key in _translation_cache:
+        cached = _translation_cache[cache_key]
         # Preserve original whitespace
         if text.startswith(' '):
             cached = ' ' + cached.lstrip()
@@ -31,7 +38,7 @@ def _translate_with_cache(text: str, translator) -> str:
     try:
         translated = translator.translate(text_stripped)
         if translated:
-            _translation_cache[text_stripped] = translated.strip()
+            _translation_cache[cache_key] = translated.strip()
             # Preserve whitespace
             if text.startswith(' '):
                 translated = ' ' + translated.lstrip()
